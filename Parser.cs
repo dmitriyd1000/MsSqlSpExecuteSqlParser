@@ -9,7 +9,7 @@ namespace MsSqlLogParse
     public class Parser
     {
         #region Consts
-        const string AllPattern = @"exec.*?sp_executesql.*?N'(?<sql>.*?)'.*?,.*?N'(?<paramdef>.*?)'.*?,.*?(?<paramval>.*)";
+        const string AllPattern = @"exec.*?sp_executesql.*?N'(?<sql>.*?)'\s*?,\s*?N'(?<paramdef>.*?(?='))'\s*?,\s*?(?<paramval>.*)";
         const string InlistPattern = @"declare (?<param>@p\d+) dbo.(?<list>\w+)\s+(?<inserts>insert into.*?(?=(exec\s+|declare\s+)))";
         const string InlistInsPattern = @"insert into {0} values\((?<value>.*?(?=\)))\)";
         const char ParamDelim = ',';
