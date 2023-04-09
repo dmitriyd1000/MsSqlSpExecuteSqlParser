@@ -1,20 +1,18 @@
 using System;
-using System.Text;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
+using System.Linq;
 
 namespace MsSqlLogParse
 {
     public class Parser
     {
         #region Consts
-        const string AllPattern = @"(?<inlist>.*)exec sp_executesql N'(?<sql>.*?(?='))',N'(?<paramdef>.*?(?='))',(?<paramval>.*)";
+        const string AllPattern = @"exec.*?sp_executesql.*?N'(?<sql>.*?)'.*?,.*?N'(?<paramdef>.*?)'.*?,.*?(?<paramval>.*)";
         const string InlistPattern = @"declare (?<param>@p\d+) dbo.(?<list>\w+)\s+(?<inserts>insert into.*?(?=(exec\s+|declare\s+)))";
         const string InlistInsPattern = @"insert into {0} values\((?<value>.*?(?=\)))\)";
-        const string ParamPrefix = "@P";
-        const string ParamDelim = ",";
-        const string ParamStringDelim = "'";
+        const char ParamDelim = ',';
         #endregion
 
         #region Attributes
@@ -34,7 +32,7 @@ namespace MsSqlLogParse
             if (inputStr.Length == 0)
                 return null;
 
-            Regex reMain = new Regex(AllPattern, RegexOptions.Singleline);
+            Regex reMain = new Regex(AllPattern, RegexOptions.Singleline | RegexOptions.IgnoreCase);
             MatchCollection mcMain = reMain.Matches(inputStr);
 
             if (mcMain.Count == 0 || mcMain[0].Groups.Count < 4)
@@ -43,50 +41,26 @@ namespace MsSqlLogParse
             string inListSql = mcMain[0].Groups["inlist"].Value;
             string sSql = mcMain[0].Groups["sql"].Value;
             string sParamValStr = mcMain[0].Groups["paramval"].Value;
-            List<string> ParamVals = new List<string>();
+            string sParamNameStr = mcMain[0].Groups["paramdef"].Value;
+            
+            /* put parameter names to ParamNames */
+            string[] ParamNames = sParamNameStr.Split(ParamDelim);
+            Dictionary<int, string> dictParamNames = new Dictionary<int, string>();
+            for (int i = 0; i < ParamNames.Length; i++)
+            {
+                /* Turn ParamNames to dictionary to sort order and keys further */
+                dictParamNames.Add(i,ParamNames[i].Trim());
+            }
+            /* Sort by lenght of parameter name, and also make parameters without types */
+            IEnumerable<KeyValuePair<int, string>> ParamNamesOrdered =
+                dictParamNames.OrderByDescending(x => x.Value.IndexOf(" "))
+                    .Select(y => new KeyValuePair<int, string>(y.Key, y.Value.Substring(0, y.Value.IndexOf(" "))));
+            
             /* put parameter values to ParamVals */
-            int posDelim = sParamValStr.IndexOf(ParamDelim);
-            if (posDelim > 0)
-            {
-                int prevPosDelim = 0;
-                while (posDelim > 0)
-                {
-                    int nextPosDelim = prevPosDelim == 0 ? posDelim : sParamValStr.IndexOf(ParamDelim, prevPosDelim);
-                    int posAps = sParamValStr.IndexOf(ParamStringDelim, prevPosDelim);
-                    if (posAps > -1 && posAps < nextPosDelim)
-                    {
-                        posAps = sParamValStr.IndexOf(ParamStringDelim, posAps + 1);
-                        while (posAps > 0 && posAps + 1 < sParamValStr.Length && sParamValStr[posAps + 1] == ParamStringDelim[0])
-                        {
-                            posAps = sParamValStr.IndexOf(ParamStringDelim, posAps + 2);
-                        }
-                        if (posAps > 0)
-                        {
-                            nextPosDelim = sParamValStr.IndexOf(ParamDelim, posAps + 1);
-                        }
-                    }
-                    posDelim = nextPosDelim;
-                    if (nextPosDelim == -1)
-                    {
-                        nextPosDelim = sParamValStr.Length - 1;
-                    }
-                    else
-                    {
-                        ParamVals.Add(sParamValStr.Substring(prevPosDelim, nextPosDelim - prevPosDelim));
-                        prevPosDelim = nextPosDelim + ParamDelim.Length;
-                    }
-                }
-                if (prevPosDelim > 0) 
-                {
-                    posDelim = sParamValStr.Length;
-                    ParamVals.Add(sParamValStr.Substring(prevPosDelim, posDelim - prevPosDelim));
-                }
-            }
-            else
-            {
-                ParamVals.Add(sParamValStr);
-            }
-
+            string[] ParamVals = sParamValStr.Split(ParamDelim);
+            for (int i = 0; i < ParamVals.Length; i++)
+            { ParamVals[i] = ParamVals[i].Trim(); }
+            
             /* Put list parameters to ParamVals */
             if (inListSql.Length > 0)
             {
@@ -114,7 +88,7 @@ namespace MsSqlLogParse
                                 vals.Add(pVal);
                             }
                             string paramval = string.Join(",", vals.ToArray());
-                            for (int i = 0; i < ParamVals.Count; i++)
+                            for (int i = 0; i < ParamVals.Length; i++)
                             {
                                 string val = ParamVals[i];
                                 if (val == inListParam)
@@ -130,13 +104,20 @@ namespace MsSqlLogParse
 
                 }
             }
-
+            
+            
             /* Parameter values replacement */
-            for (int i = ParamVals.Count; i > 0; i--)
+            foreach (var paramName in ParamNamesOrdered)
             {
-                string paramName = ParamPrefix + i.ToString();
-                string paramValue = getValueStr(ParamVals[i - 1]);
-                sSql = sSql.Replace(paramName, paramValue);
+                /* try to find by name of parameter if parameters are named */
+                string paramValueTrim = ParamVals.FirstOrDefault(x => x.Contains(paramName.Value+"="));
+                if (paramValueTrim == null) // try to get by index
+                    paramValueTrim = ParamVals[paramName.Key];
+                else
+                    paramValueTrim = paramValueTrim.Replace(paramName.Value + "=", "");
+                
+                paramValueTrim = paramValueTrim.Replace("N'", "'");
+                sSql = sSql.Replace(paramName.Value, paramValueTrim);
             }
 
             /* Formatting */
@@ -147,18 +128,5 @@ namespace MsSqlLogParse
             return null;
         }
         #endregion
-
-        #region Private methods
-        private string getValueStr(string val)
-        {
-            string ResStr = val.Trim();
-            ResStr = ResStr.Replace(" 00:00:00", "");
-            if (ResStr[0] == 'N' && ResStr != "NULL") 
-            {
-                ResStr = ResStr.Substring(1);
-            }
-            return ResStr;
         }
-        #endregion
-    }
 }

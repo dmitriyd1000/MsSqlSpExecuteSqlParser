@@ -55,3 +55,8 @@ WHERE A01.employeeID=3000000134152
 	AND A01.mi_deleteDate>='9999-12-31' 
 ORDER BY 8 DESC
 ```
+## Releases
+2023-03-21
+Universalized for processing different versions of syntax 'exec sp_executesql'
+* with named parameters as '@p1=1, @p2=1'
+* with parameters placed in wrong order or with missed parameters (e.g. @p1, @p2, @p4)
