@@ -115,8 +115,12 @@ namespace MsSqlLogParse
                     paramValueTrim = ParamVals[paramName.Key];
                 else
                     paramValueTrim = paramValueTrim.Replace(paramName.Value + "=", "");
-                
-                paramValueTrim = paramValueTrim.Replace("N'", "'");
+
+                if (paramValueTrim[0]=='N')
+                {
+                    var regex = new Regex(Regex.Escape("N'"));
+                    paramValueTrim = regex.Replace(paramValueTrim, "'", 1);
+                }
                 sSql = sSql.Replace(paramName.Value, paramValueTrim);
             }
 
