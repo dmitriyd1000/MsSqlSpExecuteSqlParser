@@ -60,5 +60,6 @@ ORDER BY 8 DESC
 Universalized for processing different versions of syntax 'exec sp_executesql'
 * with named parameters as '@p1=1, @p2=1'
 * with parameters placed in wrong order or with missed parameters (e.g. @p1, @p2, @p4)
+
 2023-10-26
   * remade splitting parameters and their values to RegEx searching to avoid wrong recognition for complex types as "decimal(26, 10)". Previous splitting was just by "," wherever it's found.
