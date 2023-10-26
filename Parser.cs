@@ -12,6 +12,7 @@ namespace MsSqlLogParse
         const string AllPattern = @"exec.*?sp_executesql.*?N'(?<sql>.*?)'\s*?,\s*?N'(?<paramdef>.*?(?='))'\s*?,\s*?(?<paramval>.*)";
         const string InlistPattern = @"declare (?<param>@p\d+) dbo.(?<list>\w+)\s+(?<inserts>insert into.*?(?=(exec\s+|declare\s+)))";
         const string InlistInsPattern = @"insert into {0} values\((?<value>.*?(?=\)))\)";
+        const string InlistParameters = @"[^,].+?(?=,@)";
         const char ParamDelim = ',';
         #endregion
 
@@ -44,22 +45,27 @@ namespace MsSqlLogParse
             string sParamNameStr = mcMain[0].Groups["paramdef"].Value;
             
             /* put parameter names to ParamNames */
-            string[] ParamNames = sParamNameStr.Split(ParamDelim);
+            Regex reParameters = new Regex(InlistParameters, RegexOptions.Singleline | RegexOptions.IgnoreCase);
+            MatchCollection ParamNames = reParameters.Matches(sParamNameStr.Replace("\r", "").Replace("\n", ""));
+            
             Dictionary<int, string> dictParamNames = new Dictionary<int, string>();
-            for (int i = 0; i < ParamNames.Length; i++)
+            for (int i = 0; i < ParamNames.Count; i++)
             {
                 /* Turn ParamNames to dictionary to sort order and keys further */
-                dictParamNames.Add(i,ParamNames[i].Trim());
+                dictParamNames.Add(i,ParamNames[i].ToString().Trim());
             }
             /* Sort by lenght of parameter name, and also make parameters without types */
             IEnumerable<KeyValuePair<int, string>> ParamNamesOrdered =
                 dictParamNames.OrderByDescending(x => x.Value.IndexOf(" "))
-                    .Select(y => new KeyValuePair<int, string>(y.Key, y.Value.Substring(0, y.Value.IndexOf(" "))));
+                    .Select(y =>
+                        new KeyValuePair<int, string>(y.Key, y.Value.Substring(0, 
+                            y.Value.IndexOf(" "))));
             
             /* put parameter values to ParamVals */
-            string[] ParamVals = sParamValStr.Split(ParamDelim);
-            for (int i = 0; i < ParamVals.Length; i++)
-            { ParamVals[i] = ParamVals[i].Trim(); }
+            //string[] ParamVals = sParamValStr.Split(ParamDelim);
+            MatchCollection mcParamVals = reParameters.Matches(sParamValStr.Replace("\r", "").Replace("\n", ""));
+
+            string[] ParamVals = mcParamVals.Cast<Match>().Select(m => m.Value).ToArray();
             
             /* Put list parameters to ParamVals */
             if (inListSql.Length > 0)
