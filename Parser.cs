@@ -12,7 +12,7 @@ namespace MsSqlLogParse
         const string AllPattern = @"exec.*?sp_executesql.*?N'(?<sql>.*?)'\s*?,\s*?N'(?<paramdef>.*?(?='))'\s*?,\s*?(?<paramval>.*)";
         const string InlistPattern = @"declare (?<param>@p\d+) dbo.(?<list>\w+)\s+(?<inserts>insert into.*?(?=(exec\s+|declare\s+)))";
         const string InlistInsPattern = @"insert into {0} values\((?<value>.*?(?=\)))\)";
-        const string InlistParameters = @"[^,].+?(?=,@)";
+        const string InlistParameters = @"[^,].+?(?=,@|$)";
         const char ParamDelim = ',';
         #endregion
 
@@ -56,7 +56,7 @@ namespace MsSqlLogParse
             }
             /* Sort by lenght of parameter name, and also make parameters without types */
             IEnumerable<KeyValuePair<int, string>> ParamNamesOrdered =
-                dictParamNames.OrderByDescending(x => x.Value.IndexOf(" "))
+                dictParamNames.OrderByDescending(x => x.Key)
                     .Select(y =>
                         new KeyValuePair<int, string>(y.Key, y.Value.Substring(0, 
                             y.Value.IndexOf(" "))));
